@@ -146,7 +146,7 @@ class Interpreter {
 					throw new MemoryUnitException ("Invalid instruction range");
 				}
 
-				if (iAddr > 0 && iAddr < memSize) {
+				if (iAddr >= 0 && iAddr < memSize) {
 					mem.set (iAddr, iVal);
 				} else {
 					throw new MemoryUnitException ("Writing to non-existent memory location");
