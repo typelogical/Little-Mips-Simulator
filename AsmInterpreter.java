@@ -8,6 +8,9 @@ class LoadException extends Exception {
 	public LoadException (String msg) {
 		super (msg);
 	}
+	public LoadException (String msg, Throwable e) {
+		super (msg, e);
+	}
 }
 class MemoryUnitException extends Exception {
 	public MemoryUnitException (String msg) {
@@ -17,6 +20,12 @@ class MemoryUnitException extends Exception {
 
 class ExecutionException extends Exception {
 	public ExecutionException (String msg) {
+		super (msg);
+	}
+}
+
+class DecodeException extends Exception {
+	public DecodeException (String msg) {
 		super (msg);
 	}
 }
@@ -159,24 +168,25 @@ class Interpreter {
 				reg.add (0);
 		}
 
-		public static final int PC = 0;
-		public static final int IR = 1;
-		public static final int R0 = 2;                                                                                                                      
-		public static final int R1 = 3;                                                                                                                      
-		public static final int R2 = 4;                                                                                                                      
-		public static final int R3 = 5;                                                                                                                      
-		public static final int R4 = 6;                                                                                                                      
-		public static final int R5 = 7;                                                                                                                      
-		public static final int R6 = 8;                                                                                                                      
-		public static final int R7 = 9;                                                                                                                      
-		public static final int R8 = 10;                                                                                                                     
-		public static final int R9 = 11;                                                                                                                     
-		public static final int R10 = 12;                                                                                                                    
-		public static final int R11 = 13;                                                                                                                    
-		public static final int R12 = 14;                                                                                                                    
-		public static final int R13 = 15;                                                                                                                    
-		public static final int R14 = 16;                                                                                                                    
-		public static final int R15 = 17;
+	
+		public static final int R0 = 0;                                                                                                                      
+		public static final int R1 = 1;                                                                                                                      
+		public static final int R2 = 2;                                                                                                                      
+		public static final int R3 = 3;                                                                                                                      
+		public static final int R4 = 4;                                                                                                                      
+		public static final int R5 = 5;                                                                                                                      
+		public static final int R6 = 6;                                                                                                                      
+		public static final int R7 = 7;                                                                                                                      
+		public static final int R8 = 8;                                                                                                                     
+		public static final int R9 = 9;                                                                                                                     
+		public static final int R10 = 10;                                                                                                                    
+		public static final int R11 = 11;                                                                                                                    
+		public static final int R12 = 12;                                                                                                                    
+		public static final int R13 = 13;                                                                                                                    
+		public static final int R14 = 14;                                                                                                                    
+		public static final int R15 = 15;
+		public static final int PC = 16;
+		public static final int IR = 17;
 		// Outputs the contents of registers
 		public void dump () {
 			System.out.format ("PC: %2d%n", reg.get (PC));
@@ -239,8 +249,7 @@ class Interpreter {
 	}
 	private AssemblyInstruction decodeHelper (String instruction) throws DecodeException {
 		String opCode = instruction.substring (0,1);
-		// Get type
-
+		boolean error = false;
 		// Itype
 		switch (opCode) {
 			case "0":
@@ -268,11 +277,11 @@ class Interpreter {
 				String addr = instruction.substring (2,4);
 				return new IType (opCode, r1, addr);
 			}
-			default: {
-				throw new DecodeException ("Invalid instruction");
-			}
+			default: 
+				error = true;
+			
 		}
-		return null;
+		if (error) throw new DecodeException ("Invalid instruction"); else  return null;
 	}
 
 	private void executeHelper (AssemblyInstruction asm, MemUnit memu, RegUnit regu) 
@@ -315,14 +324,15 @@ class Interpreter {
 			String addr = jType.getAddr ();
 			int value;
 			switch (jType.getOpCode ()) {
-				case "5":
+				case "5": // rw
+					System.out.print ("Read word: ");
 					value = in.nextInt ();
 
 					if (value < -WORDSIZE || value > WORDSIZE) {
 						throw new ExecutionException ("Invalid input expected size greater than 2 bytes.");
 					}
 					break;	
-				case "6":
+				case "6":	// write
 					try {
 						value = memu.read (addr);
 					} catch (MemoryUnitException e) {
@@ -338,8 +348,8 @@ class Interpreter {
 					}
 					
 					regu.write (RegUnit.PC, iAddr - 1);
-				case "12":
-					/// ?
+				case "c":
+					// do nothing
 			}
 
 		} else if (asm instanceof IType) {
@@ -365,7 +375,7 @@ class Interpreter {
 						}
 						break;
 					}
-					case "10":	{// bzr
+					case "a":	{// bzr
 						int r1 = regu.read (r1Id);
 						int iAddr = Integer.parseInt (addr, 16);
 						if (r1 == 0) {
@@ -376,7 +386,7 @@ class Interpreter {
 						}
 						break;
 					}
-					case "11": // bng
+					case "b": // bng
 						int r1 = regu.read (r1Id);
 						int iAddr = Integer.parseInt (addr, 16);
 						if (r1 < 0) {
@@ -420,12 +430,13 @@ class Interpreter {
 		
 		in = new Scanner (System.in);
 		instruction = in.next ();
+
 		for (startAddr = 0; !instruction.equals (halt); ++startAddr) {
 			try {
 			memu.write (Integer.toHexString (startAddr), instruction);
 			
 			} catch (MemoryUnitException e) {
-				throw new LoadException ("Could not write to memory");
+				throw new LoadException ("Could not write to memory",e);
 			} 
 			instruction = in.next ();
 			
@@ -437,7 +448,7 @@ class Interpreter {
 			try {
 				System.out.println (addr + "    " + Integer.toHexString (memu.read (addr)));
 			} catch (MemoryUnitException e) {
-				throw new LoadException ("Could not read from memory");
+				throw new LoadException ("Could not read from memory", e);
 			}
 		}
 	}
@@ -489,6 +500,7 @@ class Interpreter {
 				load ();
 			} catch (LoadException e) {
 				System.out.println (e.getMessage ());
+				e.printStackTrace ();
 			}
 		}
 		public void testFetch () {
@@ -516,73 +528,213 @@ class Interpreter {
 			String iType = "7208";
 			String rType = "1015";
 			String jType = "5008";
+			try {
+				System.out.println ("Decoding...");
+				IType asm1 = (IType) decodeHelper (iType);
+				if (asm1 != null) {
+					System.out.println ("I Type: " + iType);
+					System.out.println (asm1.getOpCode ());
+					System.out.println (asm1.getR1 ());
+					System.out.println (asm1.getAddr ());
+				} else { System.out.println ("Null pointer");}
+				RType asm2 = (RType) decodeHelper (rType);
+				System.out.println ("R Type: " + rType);
+				System.out.println (asm2.getOpCode ());
+				System.out.println (asm2.getR1 ());
+				System.out.println (asm2.getR2 ());
+				System.out.println (asm2.getR3 ());
 
-			System.out.println ("Decoding...");
-			IType asm1 = (IType) decodeHelper (iType);
-			if (asm1 != null) {
-				System.out.println ("I Type: " + iType);
-				System.out.println (asm1.getOpCode ());
-				System.out.println (asm1.getR1 ());
-				System.out.println (asm1.getAddr ());
-			} else { System.out.println ("Null pointer");}
-			RType asm2 = (RType) decodeHelper (rType);
-			System.out.println ("R Type: " + rType);
-			System.out.println (asm2.getOpCode ());
-			System.out.println (asm2.getR1 ());
-			System.out.println (asm2.getR2 ());
-			System.out.println (asm2.getR3 ());
+				JType asm3 = (JType) decodeHelper (jType);
+				System.out.println ("J TYpe: " + jType);
+				System.out.println (asm3.getOpCode ());
+				System.out.println (asm3.getAddr ());
+			} catch (DecodeException e) {
 
-			JType asm3 = (JType) decodeHelper (jType);
-			System.out.println ("J TYpe: " + jType);
-			System.out.println (asm3.getOpCode ());
-			System.out.println (asm3.getAddr ());
-
+			}
 		}
 
 		public void printR (String msg, RegUnit regu, int id) {
-			System.println (msg + Integer.toHexString (regu.read (id)));
+			System.out.println (msg + Integer.toHexString (regu.read (id)));
 		}
-		public void printM (String msg, MemUnit regu, addr id) {
-			System.println (msg + Integer.toHexString (memu.read (addr)));
+		public void printM (String msg, MemUnit regu, String addr) {
+			try {
+			System.out.println (msg + Integer.toHexString (memu.read (addr)));
+			} catch (MemoryUnitException e) {
+				e.getMessage ();
+			}
 		}
+		public void catched (Exception e) {
+			System.out.println ("Exception caught: " + e.getMessage ());
+		}
+		
 
-		void void testExecuteFixture () {
-
-		}
-		public testExecute () {
+		public void testExecuteArithematic () {
 			MemUnit memu;
 			RegUnit regu;
 			AssemblyInstruction asm;
 			String asmStr;
 
+			try {
+				memu = new MemUnit (100);
+				regu = new RegUnit ();
+
+				// Test R0 = R0 + R1, without overflow or underflow 
+				regu.write (RegUnit.R1, 2);
+				regu.write (RegUnit.R2, 2);
+				asmStr = "1012";
+				asm = decodeHelper (asmStr);
+				executeHelper (asm, memu, regu);
+				printR ("Expected 4. R0 = ",regu, RegUnit.R0);
+
+				try {
+					// Test R0 = R0 + R1, with overflow
+					regu.write (RegUnit.R1, 65536);
+					regu.write (RegUnit.R2, 1);
+					asmStr = "1012";
+					asm = decodeHelper (asmStr);
+					executeHelper (asm, memu, regu);
+					printR ("Expected overflow. R0 = ",regu, RegUnit.R0);
+				} catch (ExecutionException e) {
+					catched (e);
+				}
+				try {
+					// Test R0 = R0 + R1, with underflow
+					regu.write (RegUnit.R1, -5536);
+					regu.write (RegUnit.R2, -65536);
+					asmStr = "1012";
+					asm = decodeHelper (asmStr);
+					executeHelper (asm, memu, regu);
+					printR ("Expected underflow. R0 = ",regu, RegUnit.R0);
+				} catch (ExecutionException e) {
+					catched (e);
+				}
+				// Test R0 = R1 - R2, without overflow or underflow
+				regu.write (RegUnit.R1, 4);
+				regu.write (RegUnit.R2, 2);
+				asmStr = "2012";
+				asm = decodeHelper (asmStr);
+				executeHelper (asm, memu, regu);
+				printR ("Expected 2. R0 = ",regu, RegUnit.R0);
+				try {
+					// Test R0 = R1 - R2, with underflow
+					regu.write (RegUnit.R1, -5536);
+					regu.write (RegUnit.R2, -65536);
+					asmStr = "2012";
+					asm = decodeHelper (asmStr);
+					executeHelper (asm, memu, regu);
+					printR ("Expected underflow. R0 = ",regu, RegUnit.R0);
+				} catch (ExecutionException e) {
+					catched (e);
+				}
+				// Test R0 = R1 * R2, without overflow or underflow
+				regu.write (RegUnit.R1, 4);
+				regu.write (RegUnit.R2, 2);
+				asmStr = "3012";
+				asm = decodeHelper (asmStr);
+				executeHelper (asm, memu, regu);
+				printR ("Expected 8. R0 = ",regu, RegUnit.R0);
+				try {
+					// Test R0 = R1 * R2, with overflow
+					regu.write (RegUnit.R1, 65500);
+					regu.write (RegUnit.R2, 2);
+					asmStr = "3012";
+					asm = decodeHelper (asmStr);
+					executeHelper (asm, memu, regu);
+					printR ("Expected overflow. R0 = ", regu, RegUnit.R0);
+				} catch (ExecutionException e) {
+					catched (e);
+				}
+
+				try {
+					// Test R0 = R1 * R2, with underflow
+					regu.write (RegUnit.R1, -65500);
+					regu.write (RegUnit.R2, 2);
+					asmStr = "3012";
+					asm = decodeHelper (asmStr);
+					executeHelper (asm, memu, regu);
+					printR ("Expected underflow. R0 = ", regu, RegUnit.R0);
+				} catch (ExecutionException e) {
+					catched (e);
+				}
+
+				// Test R0 = R1 / R2, without overflow or underflow
+				regu.write (RegUnit.R1, 64);
+				regu.write (RegUnit.R2, 2);
+				asmStr = "4012";
+				asm = decodeHelper (asmStr);
+				executeHelper (asm, memu, regu);
+				printR ("Expected 32. R0 = ",regu, RegUnit.R0);
+
+				try {
+					// Test R0 = R1 / R2, with / by 0
+					regu.write (RegUnit.R1, 64);
+					regu.write (RegUnit.R2, 0);
+					asmStr = "4012";
+					asm = decodeHelper (asmStr);
+					executeHelper (asm, memu, regu);
+					printR ("Expected / by 0. R0 = ",regu, RegUnit.R0);
+				}catch (Exception e) {
+					e.getMessage ();
+				}
+			}catch (Exception e) {
+				e.getMessage ();
+			}		
+		}
+
+		public void testExecuteIO () {
+			MemUnit memu;
+			RegUnit regu;
+			AssemblyInstruction asm;
+			String asmStr;
 
 			memu = new MemUnit (100);
 			regu = new RegUnit ();
 
-			// Test R0 = R1 + R2, without overflow or underflow 
-			regu.write (RegUnit.R2, 2);
-			regu.write (RegUnit.R3, 2);
-			asmStr = "1012";
-			asm = decodeHelper (asmStr);
-			executeHelper (asm, memu, regu);
-			printR ("R1 = ",regu, RegUnit.R1);
+			try {
+				// Test read, with valid input
+				asmStr = "5005";
+				asm = decodeHelper (asmStr);
+				executeHelper (asm, memu, regu);
+				printM ("Read ", memu, "05");
 
-			// Test R0 = R1 + R2, with overflow
-			regu.write (RegUnit.R2, 65536);
-			regu.write (RegUnit.R3, 1);
-			asmStr = "1012";
-			asm = decodeHelper (asmStr);
-			executeHelper (asm, memu, regu);
-			printR ("R1 = ",regu, RegUnit.R1);
-			
-			// Test R0 = R1 + R2, with underflow
-			regu.write (RegUnit.R2, -5536);
-			regu.write (RegUnit.R3, -65536);
-			asmStr = "1012";
-			asm = decodeHelper (asmStr);
-			executeHelper (asm, memu, regu);
-			printR ("R1 = ",regu, RegUnit.R1);
-						
+				// Test read, with ivalid input
+				asmStr = "5005";
+				asm = decodeHelper (asmStr);
+				executeHelper (asm, memu, regu);
+				
+			} catch (Exception e) {
+				catched (e);
+			}
+
+			try {
+				// Test write
+				asmStr = "5005";
+				memu.write ("05", "ff");
+				asm = decodeHelper (asmStr);
+				executeHelper (asm, memu, regu);
+				printM ("Expected ff.", memu, "05");
+			} catch (Exception e) {
+				catched (e);
+			}
+		}
+
+		public void testExecuteStoreAndLoad () {
+			MemUnit memu;
+			RegUnit regu;
+			AssemblyInstruction asm;
+			String asmStr;
+
+			// try {
+			// 	memu = new MemUnit (100);
+			// 	regu = new RegUnit ();
+
+		}
+
+		public void testExecuteBranch () {
+
+		}
+
+		public void testExecuteHalt () {
 
 		}
 
@@ -596,6 +748,7 @@ class Interpreter {
 			testLoad ();
 			testFetch ();
 			testDecode ();
+			testExecuteArithematic ();
 		}
 	}
 
