@@ -1,0 +1,17 @@
+<project name="Assembly Sime" default="compile">
+	<property name="outputdir" value="."/>
+
+	<path id="1">
+		<pathelement location="." />
+		<pathelement location="${lib}/log4j.jar" />
+	</path>
+
+	<target name="prepare">
+
+	</target>
+
+	<target name="compile" depends="prepare">
+		<javac srcdir="." destdir="${outputdir}" />
+		<!--<javac srcdir="./tests" destdir="${outputdir}/tests" />-->
+	</target>
+</project>
