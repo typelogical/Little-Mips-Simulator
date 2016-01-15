@@ -87,6 +87,11 @@ class JType extends AssemblyInstruction {
 	}
 }
 class Interpreter {
+	public final static int MAX_MEM = 255;
+	public Interpreter () {
+		memu = new MemUnit (MAX_MEM);
+		regu = new RegUnit ();
+	}
 	class MemUnit {
 		private ArrayList<Integer> mem;
 		int memSize;
@@ -234,13 +239,7 @@ class Interpreter {
 	private AssemblyInstruction currInstruction;
 	private final int REGSIZE = 256;
 	private final int WORDSIZE = Integer.parseInt ("ffff", 16);
-	public Interpreter () {
-		memu = new MemUnit (100);
-		regu = new RegUnit ();
-	}
-	public void start () {
 
-	}
 	private void fetchHelper (MemUnit memu, RegUnit regu) throws MemoryUnitException {
 		int pc = regu.read (RegUnit.PC);
 		int instruction = memu.read (Integer.toHexString (pc));
@@ -265,14 +264,14 @@ class Interpreter {
 			case "5":
 			case "6":
 			case "9":
-			case "12": {
+			case "c": {
 				String addr = instruction.substring (1,4);
 				return new JType (opCode, addr);
 			}
 			case "7":
 			case "8":
-			case "10":
-			case "11": {
+			case "a":
+			case "b": {
 				int r1 = Integer.parseInt (instruction.substring (1,2), 16);
 				String addr = instruction.substring (2,4);
 				return new IType (opCode, r1, addr);
@@ -322,24 +321,38 @@ class Interpreter {
 			JType jType = (JType) asm;
 			Scanner in = new Scanner (System.in);
 			String addr = jType.getAddr ();
-			int value;
+			
 			switch (jType.getOpCode ()) {
-				case "5": // rw
-					System.out.print ("Read word: ");
-					value = in.nextInt ();
-
-					if (value < -WORDSIZE || value > WORDSIZE) {
-						throw new ExecutionException ("Invalid input expected size greater than 2 bytes.");
+				case "5": {// rw
+						String value;
+						System.out.print ("Read word: ");
+						value = in.next();
+						Integer iValue; 
+						try {
+							iValue = Integer.parseInt (value, 16);
+						} catch (NumberFormatException e) {
+							throw new ExecutionException ("Invalid input.");
+						}
+						if (iValue < -WORDSIZE || iValue > WORDSIZE) {
+							throw new ExecutionException ("Invalid input size greater than 2 bytes.");
+						}
+						try {
+							memu.write (addr, value);
+						} catch (MemoryUnitException e) {
+							throw new ExecutionException ("Could not read memory");
+						}
+						break;
+					}	
+				case "6":	{// write 
+						Integer value;
+						try {
+							value = memu.read (addr);
+						} catch (MemoryUnitException e) {
+							throw new ExecutionException ("Could not read memory");
+						}
+						System.out.println(Integer.toHexString (value));
+						break;
 					}
-					break;	
-				case "6":	// write
-					try {
-						value = memu.read (addr);
-					} catch (MemoryUnitException e) {
-						throw new ExecutionException ("Could not read memory");
-					}
-					System.out.println(value);
-					break;
 				case "9":  // jmp
 					int iAddr = Integer.parseInt (addr, 16);
 
@@ -347,11 +360,13 @@ class Interpreter {
 						throw new ExecutionException ("Memory addr accessing invalid memmory");
 					}
 					
-					regu.write (RegUnit.PC, iAddr - 1);
+					regu.write (RegUnit.PC, iAddr);
+					break;
 				case "c":
-					// do nothing
+					// set, pc register to halt flag
+					regu.write (RegUnit.PC, -1);
+					break;
 			}
-
 		} else if (asm instanceof IType) {
 				IType iType = (IType) asm;
 				int r1Id = iType.getR1 ();
@@ -399,22 +414,22 @@ class Interpreter {
 		}
 	}
 
-    public void fetch () throws LoadException, MemoryUnitException {
+    public void fetch () throws MemoryUnitException {
     	// Update IC with new instruction
     	fetchHelper (memu, regu);
+    	int pc = regu.read (RegUnit.PC);
+    	regu.write (RegUnit.PC, ++pc);
     }   
     // parse instruction
 	// Take instruction in hex and decode it for execution
-    public AssemblyInstruction  decode () {
+    public AssemblyInstruction decode () throws DecodeException {
     	// parse instruction
-    	//return decodeHelper ();
-    	return null;
+    	return decodeHelper (Integer.toHexString (regu.read (RegUnit.IR)));
 	}
 
-	public void execute ()  {
+	public void execute (AssemblyInstruction asm) throws ExecutionException  {
 		// Get asm instruction info and execute instruction
-		// switch ()
-
+		executeHelper (asm, memu, regu);
 	}
 
 	// Have user enter instruction in hex format one line at a time
@@ -453,6 +468,9 @@ class Interpreter {
 		}
 	}
 
+	public boolean eol () {
+		return regu.read (RegUnit.PC) == -1;
+	}
 	/*********************************************************************/
 	// Tests
 	class UnitTests extends AbstractUnitTests {
@@ -552,13 +570,27 @@ class Interpreter {
 
 			}
 		}
-
-		public void printR (String msg, RegUnit regu, int id) {
-			System.out.println (msg + Integer.toHexString (regu.read (id)));
+		public String toHex (int n) {
+			String szX = "";
+			int x = n;
+			boolean neg = false;
+			if (x < 0) {
+				x = Math.abs (x);
+				neg = true;
+			}
+			if (neg) {
+				szX += "-" + Integer.toHexString (x);
+			}
+			return szX;
 		}
-		public void printM (String msg, MemUnit regu, String addr) {
+		public void printR (String msg, RegUnit regu, int id) {
+			Integer x = regu.read (id);
+			String szX = toHex (x);
+			System.out.println (msg + szX);
+		}
+		public void printM (String msg, MemUnit memu, String addr) {
 			try {
-			System.out.println (msg + Integer.toHexString (memu.read (addr)));
+			System.out.println (msg + toHex (memu.read (addr)));
 			} catch (MemoryUnitException e) {
 				e.getMessage ();
 			}
@@ -608,6 +640,7 @@ class Interpreter {
 				} catch (ExecutionException e) {
 					catched (e);
 				}
+
 				// Test R0 = R1 - R2, without overflow or underflow
 				regu.write (RegUnit.R1, 4);
 				regu.write (RegUnit.R2, 2);
@@ -615,6 +648,14 @@ class Interpreter {
 				asm = decodeHelper (asmStr);
 				executeHelper (asm, memu, regu);
 				printR ("Expected 2. R0 = ",regu, RegUnit.R0);
+
+				// Test R0 = R0 + R1, without overflow or underflow and negative result 
+				regu.write (RegUnit.R1, 2);
+				regu.write (RegUnit.R2, -6);
+				asmStr = "1012";
+				asm = decodeHelper (asmStr);
+				executeHelper (asm, memu, regu);
+				printR ("Expected -4. R0 = ",regu, RegUnit.R0);
 				try {
 					// Test R0 = R1 - R2, with underflow
 					regu.write (RegUnit.R1, -5536);
@@ -708,7 +749,7 @@ class Interpreter {
 
 			try {
 				// Test write
-				asmStr = "5005";
+				asmStr = "6005";
 				memu.write ("05", "ff");
 				asm = decodeHelper (asmStr);
 				executeHelper (asm, memu, regu);
@@ -724,18 +765,99 @@ class Interpreter {
 			AssemblyInstruction asm;
 			String asmStr;
 
-			// try {
-			// 	memu = new MemUnit (100);
-			// 	regu = new RegUnit ();
+			try {
+				memu = new MemUnit (100);
+				regu = new RegUnit ();
+				// Test load,
+				memu.write ("05", "a");
+				asmStr = "7005";
+				asm = decodeHelper (asmStr);
+				executeHelper (asm, memu, regu);
+				printR ("Expected to load a. Loaded ", regu, RegUnit.R0);
 
+				// Test store
+				regu.write (RegUnit.R1, 11);
+				asmStr = "8108";
+				asm = decodeHelper (asmStr);
+				executeHelper (asm, memu, regu);
+				printM ("Expected to store b. Stored ", memu, "08");
+
+			} catch (Exception e) {
+				catched (e);
+			}
 		}
 
 		public void testExecuteBranch () {
+			MemUnit memu;
+			RegUnit regu;
+			AssemblyInstruction asm;
+			String asmStr;
 
+			try {
+				memu = new MemUnit (100);
+				regu = new RegUnit ();
+
+				// Test jmp
+				asmStr = "9029";
+				printR ("PC currently at ", regu, RegUnit.PC);
+				asm = decodeHelper (asmStr);
+				executeHelper (asm, memu, regu);
+				printR ("Expected 29. PC now at ", regu, RegUnit.PC);
+
+				// Test bzr, with true condition 
+				regu.write (RegUnit.R0, 0);
+				asmStr = "a021";
+				printR ("PC currently at ", regu, RegUnit.PC);
+				asm = decodeHelper (asmStr);
+				executeHelper (asm, memu, regu);
+				printR ("Expected 21. PC now at ", regu, RegUnit.PC);
+				
+				// Test bzr, with false condition 
+				regu.write (RegUnit.R0, 3);
+				asmStr = "a034";
+				printR ("PC currently at ", regu, RegUnit.PC);
+				asm = decodeHelper (asmStr);
+				executeHelper (asm, memu, regu);
+				printR ("Expected no jmp. PC currently at ", regu, RegUnit.PC);
+				
+				// Test bng, with true condition 
+				regu.write (RegUnit.R0, -1);
+				asmStr = "b022";
+				printR ("PC currently at ", regu, RegUnit.PC);
+				asm = decodeHelper (asmStr);
+				executeHelper (asm, memu, regu);
+				printR ("Expected 22. PC currently at ", regu, RegUnit.PC);
+				
+				// Test bng, with false condition 
+				regu.write (RegUnit.R0, 1);
+				asmStr = "b014";
+				printR ("PC currently at ", regu, RegUnit.PC);
+				asm = decodeHelper (asmStr);
+				executeHelper (asm, memu, regu);
+				printR ("Expected no jmp. PC currently at ", regu, RegUnit.PC);
+			} catch (Exception e) {
+				System.out.println (e.getMessage ());
+			}
 		}
 
 		public void testExecuteHalt () {
+			MemUnit memu;
+			RegUnit regu;
+			AssemblyInstruction asm;
+			String asmStr;
 
+			try {
+				memu = new MemUnit (100);
+				regu = new RegUnit ();
+				
+				asmStr = "c000";
+				asm = decodeHelper (asmStr);
+				executeHelper (asm, memu, regu);
+				printR ("Expected -1. PC = ", regu, RegUnit.PC);
+
+			} catch (Exception e) {
+
+			}			
 		}
 
 		public void testStart () {
@@ -749,35 +871,46 @@ class Interpreter {
 			testFetch ();
 			testDecode ();
 			testExecuteArithematic ();
+			testExecuteIO ();
+			testExecuteStoreAndLoad ();
+			testExecuteBranch ();
+			testExecuteHalt ();
+		
 		}
 	}
-
 	public AbstractUnitTests getTestInstance ()  {
 		return new UnitTests ();
 	}
-	/*********************************************************************/
 }
+	/*********************************************************************/
 
-public class AsmInterpreter {
-	public static void main (String[] args) {
-		AbstractUnitTests tests = new Interpreter().getTestInstance ();
-		tests.runTests ();
-			// try {
-			// 	//memu.write(startAddr.toHexString, instruction);
-			// } catch (NumberFormatException e) {
-			// 	System.out.println ("Invalid instruction. Load aborted.");
-			// } catch (LoadException e) {
-
-			// }
+public class Asm {
+	private Interpreter in;
+	
+	public void interpret () throws DecodeException, ExecutionException {
+		AssemblyInstruction asm;
+		while (!in.eol ()) {
+				in.fetch ();
+				asm = in.decode ();
+				in.execute (asm);
+		}
 	}
-	/*
 
-	Errors to handle:
-		Execution:
-			Register overflow
-			Invalid opcode
-			invalid register
+	public void usage () {
+		System.out.println ("java asm");
+		System.out.println ("\tLoads the assembly interpreter");
+	}
 
-
-	*/
+	public static void main (String[] args) {
+		Interpreter in = new Interpreter ();
+		try {
+			in.load ();
+			in.interpret ();	
+		} catch (Exception e) {
+			e.printStackTrace ();
+			System.out.println ("Program aborted.");
+			return;
+		}
+		System.out.println ("Program has exited sucessfully.");
+	}
 }
