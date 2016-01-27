@@ -23,7 +23,14 @@ class ExecutionException extends Exception {
 		super (msg);
 	}
 }
-
+class FetchException extends Exception {
+	public FetchException (String msg) {
+		super (msg);
+	}
+	public FetchException (String msg, Throwable e) {
+		super (msg, e);
+	}
+}
 class DecodeException extends Exception {
 	public DecodeException (String msg) {
 		super (msg);
@@ -240,11 +247,16 @@ class Interpreter {
 	private final int REGSIZE = 256;
 	private final int WORDSIZE = Integer.parseInt ("ffff", 16);
 
-	private void fetchHelper (MemUnit memu, RegUnit regu) throws MemoryUnitException {
-		int pc = regu.read (RegUnit.PC);
-		int instruction = memu.read (Integer.toHexString (pc));
-		regu.write (RegUnit.IR, instruction);
-		regu.write (RegUnit.PC, ++pc);
+	private void fetchHelper (MemUnit memu, RegUnit regu) throws FetchException {
+		try {
+			int pc = regu.read (RegUnit.PC);
+			//System.out.println ("PC: " + pc);
+			int instruction = memu.read (Integer.toHexString (pc));
+			regu.write (RegUnit.IR, instruction);
+		} catch (MemoryUnitException e) {
+			throw new FetchException ("Could not fetch instruction", e);
+		}
+
 	}
 	private AssemblyInstruction decodeHelper (String instruction) throws DecodeException {
 		String opCode = instruction.substring (0,1);
@@ -414,7 +426,7 @@ class Interpreter {
 		}
 	}
 
-    public void fetch () throws MemoryUnitException {
+    public void fetch () throws FetchException {
     	// Update IC with new instruction
     	fetchHelper (memu, regu);
     	int pc = regu.read (RegUnit.PC);
@@ -424,7 +436,14 @@ class Interpreter {
 	// Take instruction in hex and decode it for execution
     public AssemblyInstruction decode () throws DecodeException {
     	// parse instruction
-    	return decodeHelper (Integer.toHexString (regu.read (RegUnit.IR)));
+    	String asmStr = Integer.toHexString (regu.read (RegUnit.IR));
+    	// padd the string incase string is not proper length
+    	// This is due to leading zeros for instructions that only have data
+    	// ex. 0001
+    	while (asmStr.length () < 4) {
+    		asmStr = "0" + asmStr;
+    	}
+    	return decodeHelper (asmStr);
 	}
 
 	public void execute (AssemblyInstruction asm) throws ExecutionException  {
@@ -470,6 +489,15 @@ class Interpreter {
 
 	public boolean eol () {
 		return regu.read (RegUnit.PC) == -1;
+	}
+
+	public void interpret () throws FetchException, DecodeException, ExecutionException {
+		AssemblyInstruction asm;
+		while (!eol ()) {
+				fetch ();
+				asm = decode ();
+				execute (asm);
+		}
 	}
 	/*********************************************************************/
 	// Tests
@@ -859,23 +887,95 @@ class Interpreter {
 
 			}			
 		}
-
+		public void loadTest1 (MemUnit memu) throws MemoryUnitException {
+			memu.write ("00", "5008");
+			memu.write ("01", "5009");
+			memu.write ("02", "7008");
+			memu.write ("03", "7109");
+			memu.write ("04", "1201");
+			memu.write ("05", "820a");
+			memu.write ("06", "600a");
+			memu.write ("07", "c000");
+			memu.write ("08", "0000");
+			memu.write ("09", "0000");
+			memu.write ("0a", "0000");
+		}
+		public void loadTest2 (MemUnit memu) throws MemoryUnitException {
+			memu.write ("00", "5008");
+			memu.write ("01", "5009");
+			memu.write ("02", "7008");
+			memu.write ("03", "7109");
+			memu.write ("04", "2201");
+			memu.write ("05", "820a");
+			memu.write ("06", "600a");
+			memu.write ("07", "c000");
+			memu.write ("08", "0000");
+			memu.write ("09", "0000");
+			memu.write ("0a", "0000");
+		}
+		public void loadTest3 (MemUnit memu) throws MemoryUnitException {
+			memu.write ("00", "5008");
+			memu.write ("01", "5009");
+			memu.write ("02", "7008");
+			memu.write ("03", "7109");
+			memu.write ("04", "3201");
+			memu.write ("05", "820a");
+			memu.write ("06", "600a");
+			memu.write ("07", "c000");
+			memu.write ("08", "0000");
+			memu.write ("09", "0000");
+			memu.write ("0a", "0000");
+		}
+		public void loadTest4 (MemUnit memu) throws MemoryUnitException {
+			memu.write ("00", "5008");
+			memu.write ("01", "5009");
+			memu.write ("02", "7008");
+			memu.write ("03", "7109");
+			memu.write ("04", "4201");
+			memu.write ("05", "820a");
+			memu.write ("06", "600a");
+			memu.write ("07", "c000");
+			memu.write ("08", "0000");
+			memu.write ("09", "0000");
+			memu.write ("0a", "0000");
+		}
 		public void testStart () {
+				memu = new MemUnit (MAX_MEM);
+				regu = new RegUnit ();
 
+				try {
+					System.out.println ("Starting test 1");
+					loadTest1 (memu);
+					interpret ();
+					System.out.println ("Starting test 2");
+					loadTest2 (memu);
+					interpret ();
+					System.out.println ("Starting test 3");
+					loadTest3 (memu);
+					interpret ();
+					System.out.println ("Starting test 4");
+					loadTest4 (memu);
+					interpret ();
+				} catch (Exception e) {
+					e.printStackTrace ();
+					System.out.println ("Program aborted.");
+					return;
+				}
+				System.out.println ("Program has exited sucessfully.");	
 		}
 		@Override
 		public void runTests () {
-			testMem ();
-			testReg ();
-			testLoad ();
-			testFetch ();
-			testDecode ();
-			testExecuteArithematic ();
-			testExecuteIO ();
-			testExecuteStoreAndLoad ();
-			testExecuteBranch ();
-			testExecuteHalt ();
-		
+			// testMem ();
+			// testReg ();
+			// testLoad ();
+			// testFetch ();
+			// //testDecode ();
+			// testExecuteArithematic ();
+			// //testExecuteIO ();
+			// testExecuteStoreAndLoad ();
+			// testExecuteBranch ();
+			// testExecuteHalt ();	
+			testStart ();
 		}
 	}
 	public AbstractUnitTests getTestInstance ()  {
@@ -886,15 +986,6 @@ class Interpreter {
 
 public class Asm {
 	private Interpreter in;
-	
-	public void interpret () throws DecodeException, ExecutionException {
-		AssemblyInstruction asm;
-		while (!in.eol ()) {
-				in.fetch ();
-				asm = in.decode ();
-				in.execute (asm);
-		}
-	}
 
 	public void usage () {
 		System.out.println ("java asm");
@@ -902,15 +993,17 @@ public class Asm {
 	}
 
 	public static void main (String[] args) {
-		Interpreter in = new Interpreter ();
-		try {
-			in.load ();
-			in.interpret ();	
-		} catch (Exception e) {
-			e.printStackTrace ();
-			System.out.println ("Program aborted.");
-			return;
-		}
-		System.out.println ("Program has exited sucessfully.");
+		// Interpreter in = new Interpreter ();
+		// try {
+		// 	in.load ();
+		// 	in.interpret ();	
+		// } catch (Exception e) {
+		// 	e.printStackTrace ();
+		// 	System.out.println ("Program aborted.");
+		// 	return;
+		// }
+		// System.out.println ("Program has exited sucessfully.");
+		AbstractUnitTests tests = new Interpreter ().getTestInstance ();
+		tests.runTests ();
 	}
 }

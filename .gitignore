@@ -1,0 +1,5 @@
+# Class Files
+*.class
+
+# Other Files
+*.png

@@ -1,6 +1,6 @@
 <project name="Assembly Sime" default="compile">
 	<property name="outputdir" value="."/>
-
+	<property name="debugDir" value=".\debug"/>
 	<path id="1">
 		<pathelement location="." />
 		<pathelement location="${lib}/log4j.jar" />
@@ -13,5 +13,15 @@
 	<target name="compile" depends="prepare">
 		<javac srcdir="." destdir="${outputdir}" />
 		<!--<javac srcdir="./tests" destdir="${outputdir}/tests" />-->
+	</target>
+
+	<target name="clean">
+		<del>
+			
+		</del>
+	</target>
+
+	<target name="debug">
+		<javac srcdir="${debugDir}" destdir="${debugDir}"/>
 	</target>
 </project>
